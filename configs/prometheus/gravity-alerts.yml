@@ -1,0 +1,256 @@
+groups:
+  - name: gravity-critical
+    rules:
+      - alert: GravityHighErrorRate
+        expr: rate(gravity_error_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: P0
+          service: gravity
+        annotations:
+          summary: "High error rate detected in Gravity pipeline"
+          description: "Error rate is {{ $value | humanizePercentage }} for pipeline {{ $labels.pipeline }}"
+          runbook: "https://docs.gravity.io/runbooks/high-error-rate"
+
+      - alert: GravityHighLatency
+        expr: histogram_quantile(0.95, rate(gravity_event_time_latency_bucket[5m])) > 300
+        for: 5m
+        labels:
+          severity: P0
+          service: gravity
+        annotations:
+          summary: "High latency detected in Gravity pipeline"
+          description: "95th percentile latency is {{ $value }}s for pipeline {{ $labels.pipeline }}"
+          runbook: "https://docs.gravity.io/runbooks/high-latency"
+
+      - alert: GravityPipelineDown
+        expr: up{job="gravity"} == 0
+        for: 1m
+        labels:
+          severity: P0
+          service: gravity
+        annotations:
+          summary: "Gravity pipeline is down"
+          description: "Gravity pipeline {{ $labels.instance }} has been down for more than 1 minute"
+          runbook: "https://docs.gravity.io/runbooks/pipeline-down"
+
+  - name: gravity-database
+    rules:
+      - alert: GravityDatabaseConnectionFailure
+        expr: rate(gravity_connection_failure_total[5m]) > 0.05
+        for: 3m
+        labels:
+          severity: P1
+          service: gravity
+        annotations:
+          summary: "High database connection failure rate"
+          description: "Database connection failure rate is {{ $value | humanizePercentage }} for {{ $labels.database_type }} {{ $labels.endpoint }}"
+          runbook: "https://docs.gravity.io/runbooks/db-connection-failure"
+
+      - alert: GravityHighReplicationLag
+        expr: gravity_replication_lag_seconds > 60
+        for: 5m
+        labels:
+          severity: P1
+          service: gravity
+        annotations:
+          summary: "High replication lag detected"
+          description: "Replication lag is {{ $value }}s for {{ $labels.database_type }} {{ $labels.endpoint }}"
+          runbook: "https://docs.gravity.io/runbooks/replication-lag"
+
+      - alert: GravityBinlogPositionStuck
+        expr: increase(gravity_binlog_position[10m]) == 0 and gravity_binlog_position > 0
+        for: 10m
+        labels:
+          severity: P1
+          service: gravity
+        annotations:
+          summary: "MySQL binlog position appears to be stuck"
+          description: "Binlog position has not advanced for 10 minutes on {{ $labels.endpoint }}"
+          runbook: "https://docs.gravity.io/runbooks/binlog-stuck"
+
+      - alert: GravityOplogTimestampStuck
+        expr: increase(gravity_oplog_timestamp[10m]) == 0 and gravity_oplog_timestamp > 0
+        for: 10m
+        labels:
+          severity: P1
+          service: gravity
+        annotations:
+          summary: "MongoDB oplog timestamp appears to be stuck"
+          description: "Oplog timestamp has not advanced for 10 minutes on {{ $labels.endpoint }}"
+          runbook: "https://docs.gravity.io/runbooks/oplog-stuck"
+
+  - name: gravity-kafka
+    rules:
+      - alert: GravityKafkaProduceLatency
+        expr: histogram_quantile(0.95, rate(gravity_kafka_produce_latency_bucket[5m])) > 1000
+        for: 5m
+        labels:
+          severity: P2
+          service: gravity
+        annotations:
+          summary: "High Kafka produce latency"
+          description: "95th percentile Kafka produce latency is {{ $value }}ms for topic {{ $labels.topic }}"
+          runbook: "https://docs.gravity.io/runbooks/kafka-latency"
+
+      - alert: GravityKafkaMessageSizeLarge
+        expr: histogram_quantile(0.95, rate(gravity_kafka_message_size_bucket[5m])) > 1048576
+        for: 10m
+        labels:
+          severity: P2
+          service: gravity
+        annotations:
+          summary: "Large Kafka message size detected"
+          description: "95th percentile message size is {{ $value | humanizeBytes }} for topic {{ $labels.topic }}"
+          runbook: "https://docs.gravity.io/runbooks/large-messages"
+
+      - alert: GravityKafkaPartitionOffsetLag
+        expr: gravity_kafka_partition_offset - on(topic, partition) group_right() kafka_consumer_lag_sum > 10000
+        for: 5m
+        labels:
+          severity: P2
+          service: gravity
+        annotations:
+          summary: "High Kafka partition offset lag"
+          description: "Partition offset lag is {{ $value }} for topic {{ $labels.topic }} partition {{ $labels.partition }}"
+          runbook: "https://docs.gravity.io/runbooks/kafka-lag"
+
+  - name: gravity-data-quality
+    rules:
+      - alert: GravityDataInconsistency
+        expr: gravity_data_consistency_ratio < 0.99
+        for: 5m
+        labels:
+          severity: P1
+          service: gravity
+        annotations:
+          summary: "Data consistency issue detected"
+          description: "Data consistency ratio is {{ $value | humanizePercentage }} for {{ $labels.schema }}.{{ $labels.table }}"
+          runbook: "https://docs.gravity.io/runbooks/data-consistency"
+
+      - alert: GravityHighDataSkipRate
+        expr: rate(gravity_data_skip_total[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: P2
+          service: gravity
+        annotations:
+          summary: "High data skip rate detected"
+          description: "Data skip rate is {{ $value | humanizePercentage }} for {{ $labels.schema }}.{{ $labels.table }}"
+          runbook: "https://docs.gravity.io/runbooks/data-skip"
+
+      - alert: GravityDataCorruption
+        expr: increase(gravity_data_corruption_total[1h]) > 0
+        for: 0m
+        labels:
+          severity: P0
+          service: gravity
+        annotations:
+          summary: "Data corruption detected"
+          description: "Data corruption detected in {{ $labels.schema }}.{{ $labels.table }}"
+          runbook: "https://docs.gravity.io/runbooks/data-corruption"
+
+      - alert: GravityHighDataLag
+        expr: histogram_quantile(0.95, rate(gravity_data_lag_bucket[5m])) > 300
+        for: 10m
+        labels:
+          severity: P2
+          service: gravity
+        annotations:
+          summary: "High data lag detected"
+          description: "95th percentile data lag is {{ $value }}s for {{ $labels.schema }}.{{ $labels.table }}"
+          runbook: "https://docs.gravity.io/runbooks/data-lag"
+
+  - name: gravity-performance
+    rules:
+      - alert: GravityHighMemoryUsage
+        expr: gravity_memory_usage_bytes / gravity_memory_limit_bytes > 0.8
+        for: 10m
+        labels:
+          severity: P2
+          service: gravity
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is {{ $value | humanizePercentage }} for component {{ $labels.component }}"
+          runbook: "https://docs.gravity.io/runbooks/high-memory"
+
+      - alert: GravityHighCPUUsage
+        expr: gravity_cpu_usage_percent > 80
+        for: 15m
+        labels:
+          severity: P3
+          service: gravity
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is {{ $value }}% for component {{ $labels.component }}"
+          runbook: "https://docs.gravity.io/runbooks/high-cpu"
+
+      - alert: GravityLowThroughput
+        expr: gravity_throughput_rows_per_second < 100
+        for: 10m
+        labels:
+          severity: P3
+          service: gravity
+        annotations:
+          summary: "Low throughput detected"
+          description: "Throughput is {{ $value }} rows/sec for {{ $labels.schema }}.{{ $labels.table }}"
+          runbook: "https://docs.gravity.io/runbooks/low-throughput"
+
+      - alert: GravityComponentLatencyHigh
+        expr: histogram_quantile(0.95, rate(gravity_component_latency_bucket[5m])) > 5000
+        for: 5m
+        labels:
+          severity: P2
+          service: gravity
+        annotations:
+          summary: "High component latency detected"
+          description: "95th percentile component latency is {{ $value }}ms for {{ $labels.component }} {{ $labels.operation }}"
+          runbook: "https://docs.gravity.io/runbooks/component-latency"
+
+  - name: gravity-connectivity
+    rules:
+      - alert: GravityDatabaseConnectionsLow
+        expr: gravity_database_connections < 1
+        for: 2m
+        labels:
+          severity: P1
+          service: gravity
+        annotations:
+          summary: "No active database connections"
+          description: "No active connections to {{ $labels.database_type }} {{ $labels.endpoint }}"
+          runbook: "https://docs.gravity.io/runbooks/no-db-connections"
+
+      - alert: GravityConnectionHealthPoor
+        expr: gravity_connection_health < 0.8
+        for: 5m
+        labels:
+          severity: P2
+          service: gravity
+        annotations:
+          summary: "Poor connection health detected"
+          description: "Connection health is {{ $value | humanizePercentage }} for {{ $labels.database_type }} {{ $labels.endpoint }}"
+          runbook: "https://docs.gravity.io/runbooks/poor-connection-health"
+
+  - name: gravity-business-metrics
+    rules:
+      - alert: GravityTableSizeGrowthAnomaly
+        expr: increase(gravity_table_size_bytes[1h]) > 1073741824  # 1GB growth per hour
+        for: 0m
+        labels:
+          severity: P3
+          service: gravity
+        annotations:
+          summary: "Unusual table size growth detected"
+          description: "Table {{ $labels.schema }}.{{ $labels.table }} grew by {{ $value | humanizeBytes }} in the last hour"
+          runbook: "https://docs.gravity.io/runbooks/table-growth"
+
+      - alert: GravityRetryRateHigh
+        expr: rate(gravity_retry_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: P2
+          service: gravity
+        annotations:
+          summary: "High retry rate detected"
+          description: "Retry rate is {{ $value | humanizePercentage }} for {{ $labels.pipeline }} {{ $labels.component }}"
+          runbook: "https://docs.gravity.io/runbooks/high-retry-rate"
